@@ -1,6 +1,6 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { AppIcon } from '../components/AppIcon';
@@ -25,7 +25,7 @@ import { appendHandRecord } from '../storage/historyRepo';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Jeu'>;
 
-const CHIP_DENOMINATIONS = [5, 10, 25, 50];
+const CHIP_DENOMINATIONS = [1, 5, 10, 30];
 /** Sabot à 4 jeux de 52 cartes (208 cartes), pour limiter le risque d'épuiser le sabot avec des re-splits. */
 const DECK_COUNT = 4;
 
@@ -49,6 +49,15 @@ export function JeuScreen({ route, navigation }: Props) {
   const [status, setStatus] = useState<StakingStatus | null>(null);
   const [stake, setStake] = useState(MIN_STAKE);
   const [game, setGame] = useState<GameState | null>(null);
+  // Reflète `stake` de façon synchrone (contrairement au state React, mis à jour immédiatement,
+  // sans attendre un nouveau rendu) : permet de refuser un ajout de jeton qui dépasserait la
+  // mise max même si plusieurs taps arrivent avant que l'écran n'ait eu le temps de se redessiner.
+  const stakeRef = useRef(stake);
+
+  function setStakeValue(next: number) {
+    stakeRef.current = next;
+    setStake(next);
+  }
 
   const refresh = useCallback(async () => {
     setApp(getManagedApp(packageName));
@@ -66,11 +75,19 @@ export function JeuScreen({ route, navigation }: Props) {
   useEffect(() => {
     if (!status) return;
     if (status.usingGrace) {
-      setStake(status.maxStake);
+      setStakeValue(status.maxStake);
     } else {
-      setStake(s => Math.min(s, Math.max(status.maxStake, MIN_STAKE)));
+      setStakeValue(Math.min(stakeRef.current, Math.max(status.maxStake, MIN_STAKE)));
     }
   }, [status]);
+
+  /** Ajoute un jeton à la mise, en refusant tout ajout qui la ferait dépasser la mise max. */
+  function handleAddChip(value: number) {
+    if (!status) return;
+    const next = stakeRef.current + value;
+    if (next > status.maxStake) return;
+    setStakeValue(next);
+  }
 
   useLayoutEffect(() => {
     navigation.setOptions({ title: app?.label ?? 'Blackjack' });
@@ -168,7 +185,7 @@ export function JeuScreen({ route, navigation }: Props) {
                 />
                 {canSplit(game) && (
                   <ActionButton
-                    label="Séparer"
+                    label="Split"
                     onPress={() => act('SPLIT')}
                     disabled={status.usingGrace || !splitAffordable}
                   />
@@ -191,7 +208,7 @@ export function JeuScreen({ route, navigation }: Props) {
           <View style={styles.stakeRow}>
             <Text style={styles.stakeValue}>{stake} min</Text>
             {!status.usingGrace && stake > MIN_STAKE && (
-              <Pressable onPress={() => setStake(MIN_STAKE)} hitSlop={10}>
+              <Pressable onPress={() => setStakeValue(MIN_STAKE)} hitSlop={10}>
                 <Text style={styles.clearLink}>Effacer</Text>
               </Pressable>
             )}
@@ -204,7 +221,7 @@ export function JeuScreen({ route, navigation }: Props) {
               denominations={CHIP_DENOMINATIONS}
               currentStake={stake}
               maxStake={status.maxStake}
-              onAdd={value => setStake(s => Math.min(status.maxStake, s + value))}
+              onAdd={handleAddChip}
             />
           )}
 
@@ -255,7 +272,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   appLabel: {
-    color: casino.textPrimary,
+    ...silverTextStyle,
     fontSize: 18,
     fontWeight: '700',
   },
@@ -323,12 +340,14 @@ const styles = StyleSheet.create({
   },
   playerHandColumn: {
     paddingHorizontal: 8,
-    borderRadius: 12,
+    paddingVertical: 6,
+    borderRadius: 18,
   },
   activeHandColumn: {
     backgroundColor: 'rgba(212, 175, 55, 0.12)',
     borderWidth: 1,
     borderColor: casino.gold,
+    borderRadius: 18,
   },
   outcomeBox: {
     alignItems: 'center',

@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
     borderColor: casino.border,
   },
   heroLabel: {
-    color: casino.textSecondary,
+    ...silverTextStyle,
     fontSize: 13,
     letterSpacing: 1.5,
     textTransform: 'uppercase',
@@ -119,7 +119,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   sectionTitle: {
-    color: casino.textSecondary,
+    ...silverTextStyle,
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: 1,

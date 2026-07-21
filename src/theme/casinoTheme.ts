@@ -23,9 +23,6 @@ export const casino = {
   // Textes argentés, avec un ton plus clair utilisé en textShadow pour un léger reflet.
   silver: '#c7cad2',
   silverBright: '#f2f4f8',
-  textPrimary: '#f5f5f0',
-  textSecondary: '#a8a29b',
-  textMuted: '#6f6f68',
 
   // Cartes à jouer : fond doré, symboles et chiffres en encre noire (aucune distinction de
   // couleur par famille). Le dos des cartes reste sombre à liseré or.
@@ -57,14 +54,14 @@ export const silverTextStyle = {
 /** Couleur de jeton par dénomination (minutes). Retombe sur l'or pour une valeur inconnue. */
 export function chipColor(value: number): string {
   switch (value) {
+    case 1:
+      return casino.chipBlack;
     case 5:
       return casino.chipRed;
     case 10:
       return casino.chipBlue;
-    case 25:
+    case 30:
       return casino.chipGreen;
-    case 50:
-      return casino.chipBlack;
     default:
       return casino.gold;
   }

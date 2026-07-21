@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { ManagedApp } from '../storage/configRepo';
-import { casino } from '../theme/casinoTheme';
+import { casino, silverTextStyle } from '../theme/casinoTheme';
 import { AppIcon } from './AppIcon';
 import { BudgetBadge } from './BudgetBadge';
 
@@ -50,7 +50,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   label: {
-    color: casino.textPrimary,
+    ...silverTextStyle,
     fontSize: 16,
     fontWeight: '700',
   },

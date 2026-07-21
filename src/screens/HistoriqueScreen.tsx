@@ -18,7 +18,7 @@ const OUTCOME_COLOR: Record<Outcome, string> = {
   win: casino.win,
   blackjack: casino.gold,
   lose: casino.lose,
-  push: casino.textSecondary,
+  push: casino.silver,
 };
 
 /** Vrai si un timestamp tombe le jour calendaire actuel (heure locale). */
@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
     borderColor: casino.border,
   },
   summaryLabel: {
-    color: casino.textSecondary,
+    ...silverTextStyle,
     fontSize: 13,
     letterSpacing: 1,
     textTransform: 'uppercase',
@@ -155,12 +155,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   label: {
-    color: casino.textPrimary,
+    ...silverTextStyle,
     fontSize: 15,
     fontWeight: '700',
   },
   meta: {
-    color: casino.textSecondary,
+    ...silverTextStyle,
     fontSize: 12,
     marginTop: 2,
   },

@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   permissionBody: {
-    color: casino.textSecondary,
+    ...silverTextStyle,
     fontSize: 13,
   },
   list: {
@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   label: {
-    color: casino.textPrimary,
+    ...silverTextStyle,
     fontSize: 16,
     fontWeight: '700',
     marginBottom: 6,

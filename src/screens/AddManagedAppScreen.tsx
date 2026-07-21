@@ -4,7 +4,7 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { AppIcon } from '../components/AppIcon';
 import { usageStatsBridge, type InstalledApp } from '../native/UsageStatsBridge';
 import type { RootStackParamList } from '../navigation/types';
-import { casino } from '../theme/casinoTheme';
+import { casino, silverTextStyle } from '../theme/casinoTheme';
 import { addManagedApp, getManagedApps } from '../storage/configRepo';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddManagedApp'>;
@@ -71,7 +71,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   emptyText: {
-    color: casino.textSecondary,
+    ...silverTextStyle,
     fontSize: 15,
     textAlign: 'center',
     marginTop: 40,
@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
     marginRight: 14,
   },
   label: {
-    color: casino.textPrimary,
+    ...silverTextStyle,
     fontSize: 16,
     fontWeight: '700',
   },

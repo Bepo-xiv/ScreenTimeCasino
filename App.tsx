@@ -32,7 +32,7 @@ const navigationTheme = {
     primary: casino.gold,
     background: casino.background,
     card: casino.background,
-    text: casino.textPrimary,
+    text: casino.silver,
     border: casino.border,
     notification: casino.gold,
   },
@@ -52,7 +52,7 @@ function App() {
         <Stack.Navigator
           screenOptions={{
             headerStyle: { backgroundColor: casino.background },
-            headerTintColor: casino.textPrimary,
+            headerTintColor: casino.silver,
             headerShadowVisible: false,
           }}>
           {/* Accueil : solde de temps par app + bouton "Jouer" vers la table de blackjack. */}
