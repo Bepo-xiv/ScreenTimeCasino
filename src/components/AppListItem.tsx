@@ -15,7 +15,7 @@ export function AppListItem({ app, remainingMinutes, onPress }: Props) {
   return (
     <Pressable style={({ pressed }) => [styles.row, pressed && styles.pressed]} onPress={onPress}>
       <View style={styles.icon}>
-        <AppIcon icon={app.icon} size={30} />
+        <AppIcon icon={app.icon} label={app.label} size={30} />
       </View>
       <View style={styles.info}>
         <Text style={styles.label}>{app.label}</Text>

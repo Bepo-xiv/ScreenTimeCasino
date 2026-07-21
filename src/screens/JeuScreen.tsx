@@ -2,8 +2,10 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
 import { AppIcon } from '../components/AppIcon';
 import { BudgetBadge } from '../components/BudgetBadge';
+import { ChipSelector } from '../components/ChipSelector';
 import { HandRow } from '../components/HandRow';
 import {
   canDouble,
@@ -16,13 +18,13 @@ import {
 import type { GameState, Outcome } from '../blackjack/blackjackEngine';
 import type { RootStackParamList } from '../navigation/types';
 import { applyHandResult, getStakingStatus, MIN_STAKE, type StakingStatus } from '../blackjack/screenTimeTracker';
-import { casino } from '../theme/casinoTheme';
+import { casino, silverTextStyle } from '../theme/casinoTheme';
 import { getManagedApp, type ManagedApp } from '../storage/configRepo';
 import { appendHandRecord } from '../storage/historyRepo';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Jeu'>;
 
-const STAKE_STEP = 5;
+const CHIP_DENOMINATIONS = [5, 10, 25, 50];
 
 const OUTCOME_LABEL: Record<Outcome, string> = {
   win: 'VOUS GAGNEZ',
@@ -111,7 +113,7 @@ export function JeuScreen({ route, navigation }: Props) {
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.appLabelRow}>
-          {app && <AppIcon icon={app.icon} size={22} />}
+          {app && <AppIcon icon={app.icon} label={app.label} size={22} />}
           <Text style={styles.appLabel}>{app?.label}</Text>
         </View>
         <BudgetBadge remainingMinutes={status.remainingMinutes} />
@@ -159,22 +161,27 @@ export function JeuScreen({ route, navigation }: Props) {
       ) : (
         <View style={styles.bettingBox}>
           <Text style={styles.stakeLabel}>{status.usingGrace ? 'Mise de secours' : 'Votre mise'}</Text>
-          <View style={styles.stepper}>
-            <Pressable
-              style={[styles.stepperButton, status.usingGrace && styles.stepperButtonDisabled]}
-              disabled={status.usingGrace}
-              onPress={() => setStake(s => Math.max(MIN_STAKE, s - STAKE_STEP))}>
-              <Text style={styles.stepperGlyph}>−</Text>
-            </Pressable>
+          <View style={styles.stakeRow}>
             <Text style={styles.stakeValue}>{stake} min</Text>
-            <Pressable
-              style={[styles.stepperButton, status.usingGrace && styles.stepperButtonDisabled]}
-              disabled={status.usingGrace}
-              onPress={() => setStake(s => Math.min(status.maxStake, s + STAKE_STEP))}>
-              <Text style={styles.stepperGlyph}>+</Text>
-            </Pressable>
+            {!status.usingGrace && stake > MIN_STAKE && (
+              <Pressable onPress={() => setStake(MIN_STAKE)} hitSlop={10}>
+                <Text style={styles.clearLink}>Effacer</Text>
+              </Pressable>
+            )}
           </View>
-          <ActionButton label="Distribuer" onPress={handleDeal} primary />
+
+          {status.usingGrace ? (
+            <Text style={styles.graceHint}>Dernière chance : {status.maxStake} min, tout ou rien.</Text>
+          ) : (
+            <ChipSelector
+              denominations={CHIP_DENOMINATIONS}
+              currentStake={stake}
+              maxStake={status.maxStake}
+              onAdd={value => setStake(s => Math.min(status.maxStake, s + value))}
+            />
+          )}
+
+          <ActionButton label="Distribuer" onPress={handleDeal} primary style={styles.dealButton} />
         </View>
       )}
     </View>
@@ -186,15 +193,17 @@ function ActionButton({
   onPress,
   disabled,
   primary,
+  style,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   primary?: boolean;
+  style?: StyleProp<ViewStyle>;
 }) {
   return (
     <Pressable
-      style={[styles.actionButton, primary && styles.actionButtonPrimary, disabled && styles.actionButtonDisabled]}
+      style={[styles.actionButton, primary && styles.actionButtonPrimary, disabled && styles.actionButtonDisabled, style]}
       onPress={onPress}
       disabled={disabled}>
       <Text style={[styles.actionButtonText, primary && styles.actionButtonTextPrimary]}>{label}</Text>
@@ -243,7 +252,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   lockedBody: {
-    color: casino.textSecondary,
+    ...silverTextStyle,
     fontSize: 15,
     textAlign: 'center',
   },
@@ -255,35 +264,29 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: 10,
   },
-  stepper: {
+  stakeRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 28,
-  },
-  stepperButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: casino.tableFeltDark,
-    borderWidth: 1,
-    borderColor: casino.gold,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepperButtonDisabled: {
-    opacity: 0.35,
-  },
-  stepperGlyph: {
-    color: casino.gold,
-    fontSize: 22,
-    fontWeight: '700',
+    alignItems: 'baseline',
+    gap: 14,
+    marginBottom: 20,
   },
   stakeValue: {
-    color: casino.textPrimary,
-    fontSize: 24,
+    ...silverTextStyle,
+    fontSize: 30,
     fontWeight: '800',
-    marginHorizontal: 22,
-    minWidth: 90,
+    minWidth: 100,
+    textAlign: 'center',
+  },
+  clearLink: {
+    color: casino.goldMuted,
+    fontSize: 13,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
+  graceHint: {
+    ...silverTextStyle,
+    fontSize: 14,
+    marginBottom: 24,
     textAlign: 'center',
   },
   outcomeBox: {
@@ -296,7 +299,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   payoutText: {
-    color: casino.textPrimary,
+    ...silverTextStyle,
     fontSize: 16,
     fontWeight: '700',
     marginTop: 4,
@@ -308,6 +311,9 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 'auto',
     marginBottom: 24,
+  },
+  dealButton: {
+    marginTop: 28,
   },
   actionButton: {
     borderWidth: 1.5,

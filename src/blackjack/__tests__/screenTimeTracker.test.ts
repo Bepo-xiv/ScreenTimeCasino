@@ -16,7 +16,7 @@ const PACKAGE = 'com.test.app';
 beforeEach(() => {
   appStorage.clearAll();
   blockState.clearAll();
-  addManagedApp({ packageName: PACKAGE, label: 'Test App', icon: '🧪', baseBudgetMinutes: 30 });
+  addManagedApp({ packageName: PACKAGE, label: 'Test App', icon: 'file:///tmp/test-icon.png', baseBudgetMinutes: 30 });
 });
 
 describe('non-Android platforms (and the Jest test environment)', () => {

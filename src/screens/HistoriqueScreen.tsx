@@ -3,7 +3,7 @@ import React, { useCallback, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import type { Outcome } from '../blackjack/blackjackEngine';
 import { AppIcon } from '../components/AppIcon';
-import { casino } from '../theme/casinoTheme';
+import { casino, silverTextStyle } from '../theme/casinoTheme';
 import { getManagedApp } from '../storage/configRepo';
 import { getHistory, type HandRecord } from '../storage/historyRepo';
 
@@ -71,7 +71,7 @@ export function HistoriqueScreen() {
           return (
             <View style={styles.row}>
               <View style={styles.icon}>
-                <AppIcon icon={app?.icon ?? '🎰'} size={26} />
+                <AppIcon icon={app?.icon} label={app?.label ?? item.packageName} size={26} />
               </View>
               <View style={styles.info}>
                 <Text style={styles.label}>{app?.label ?? item.packageName}</Text>
@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   summaryValue: {
-    color: casino.textPrimary,
+    ...silverTextStyle,
     fontSize: 32,
     fontWeight: '900',
   },
@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   emptyText: {
-    color: casino.textSecondary,
+    ...silverTextStyle,
     fontSize: 15,
     textAlign: 'center',
     marginTop: 40,

@@ -52,7 +52,7 @@ export function AddManagedAppScreen({ navigation }: Props) {
         renderItem={({ item }) => (
           <Pressable style={styles.row} onPress={() => handleAdd(item)}>
             <View style={styles.icon}>
-              <AppIcon icon={item.icon} size={28} />
+              <AppIcon icon={item.icon} label={item.label} size={28} />
             </View>
             <Text style={styles.label}>{item.label}</Text>
           </Pressable>

@@ -5,7 +5,7 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { AppIcon } from '../components/AppIcon';
 import { checkUsageAccessPermission, requestUsageAccessPermission } from '../blackjack/screenTimeTracker';
 import type { RootStackParamList } from '../navigation/types';
-import { casino } from '../theme/casinoTheme';
+import { casino, silverTextStyle } from '../theme/casinoTheme';
 import { getManagedApps, removeManagedApp, updateManagedApp, type ManagedApp } from '../storage/configRepo';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AppConfig'>;
@@ -50,7 +50,7 @@ export function AppConfigScreen({ navigation }: Props) {
         renderItem={({ item }) => (
           <View style={styles.row}>
             <View style={styles.icon}>
-              <AppIcon icon={item.icon} size={28} />
+              <AppIcon icon={item.icon} label={item.label} size={28} />
             </View>
             <View style={styles.info}>
               <Text style={styles.label}>{item.label}</Text>
@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   emptyText: {
-    color: casino.textSecondary,
+    ...silverTextStyle,
     fontSize: 15,
     textAlign: 'center',
     marginTop: 40,
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   budgetValue: {
-    color: casino.textSecondary,
+    ...silverTextStyle,
     fontSize: 13,
     marginHorizontal: 10,
   },

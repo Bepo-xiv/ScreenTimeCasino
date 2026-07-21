@@ -24,7 +24,12 @@ export function HandRow({ cards, label, hideAllButFirst }: Props) {
       </Text>
       <View style={styles.row}>
         {cards.map((card, i) => (
-          <PlayingCard key={`${card.rank}-${card.suit}-${i}`} card={card} faceDown={hideAllButFirst && i > 0} />
+          <PlayingCard
+            key={`${card.rank}-${card.suit}-${i}`}
+            card={card}
+            faceDown={hideAllButFirst && i > 0}
+            dealDelay={i * 150}
+          />
         ))}
         {cards.length === 0 && <PlayingCard faceDown />}
       </View>
