@@ -116,7 +116,7 @@ describe('DOUBLE', () => {
 });
 
 describe('SPLIT', () => {
-  it('is only allowed with exactly 2 cards of the same rank, and only once', () => {
+  it('is only allowed with exactly 2 cards of the same rank', () => {
     const shoe = [c('9'), c('6'), c('8'), c('4')]; // 9/8 don't match
     const dealt = gameReducer(stateWithShoe(10, shoe), { type: 'DEAL' });
     expect(canSplit(dealt)).toBe(false);
@@ -137,7 +137,7 @@ describe('SPLIT', () => {
     expect(split.playerHands).toHaveLength(2);
     expect(split.playerHands[0].cards).toEqual([c('9'), c('K')]);
     expect(split.playerHands[1].cards).toEqual([c('9')]);
-    expect(canSplit(split)).toBe(false); // no re-splitting
+    expect(canSplit(split)).toBe(false); // 9 and K no longer match
 
     const standHand0 = gameReducer(split, { type: 'STAND' });
     expect(standHand0.phase).toBe('playerTurn');
@@ -152,6 +152,41 @@ describe('SPLIT', () => {
     expect(standHand1.playerHands[1].outcome).toBe('lose'); // 11 vs 18
     expect(standHand1.playerHands[1].payoutMinutes).toBe(-10);
     expect(standHand1.payoutMinutes).toBe(0);
+  });
+
+  it('allows re-splitting whenever a fresh matching pair comes up', () => {
+    // DEAL: player 8,8 ; dealer 5,4. First SPLIT draws another 8 for hand 0 (8+8), which can
+    // immediately be split again. Second SPLIT draws a 2 for the new hand 0 (8+2) and inserts
+    // a third hand right after it, so play order stays hand0 -> hand1 -> hand2 (the original,
+    // still-untouched second half of the very first split).
+    const shoe = [c('8'), c('5'), c('8'), c('4'), c('8'), c('2'), c('9'), c('6'), c('9')];
+    const dealt = gameReducer(stateWithShoe(10, shoe), { type: 'DEAL' });
+
+    const firstSplit = gameReducer(dealt, { type: 'SPLIT' });
+    expect(firstSplit.playerHands).toHaveLength(2);
+    expect(firstSplit.playerHands[0].cards).toEqual([c('8'), c('8')]);
+    expect(canSplit(firstSplit)).toBe(true); // 8+8 again: re-splittable
+
+    const secondSplit = gameReducer(firstSplit, { type: 'SPLIT' });
+    expect(secondSplit.activeHandIndex).toBe(0);
+    expect(secondSplit.playerHands).toHaveLength(3);
+    expect(secondSplit.playerHands[0].cards).toEqual([c('8'), c('2')]);
+    expect(secondSplit.playerHands[1].cards).toEqual([c('8')]); // from the re-split
+    expect(secondSplit.playerHands[2].cards).toEqual([c('8')]); // from the original split, untouched
+
+    const standHand0 = gameReducer(secondSplit, { type: 'STAND' });
+    expect(standHand0.activeHandIndex).toBe(1);
+    expect(standHand0.playerHands[1].cards).toEqual([c('8'), c('9')]);
+
+    const standHand1 = gameReducer(standHand0, { type: 'STAND' });
+    expect(standHand1.activeHandIndex).toBe(2);
+    expect(standHand1.playerHands[2].cards).toEqual([c('8'), c('6')]);
+
+    const standHand2 = gameReducer(standHand1, { type: 'STAND' });
+    expect(standHand2.phase).toBe('settled');
+    expect(standHand2.dealerHand.cards).toEqual([c('5'), c('4'), c('9')]); // 9 -> 18
+    expect(standHand2.playerHands.map(h => h.outcome)).toEqual(['lose', 'lose', 'lose']);
+    expect(standHand2.payoutMinutes).toBe(-30);
   });
 
   it('allows doubling a hand after splitting (DAS)', () => {

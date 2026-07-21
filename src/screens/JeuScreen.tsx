@@ -26,6 +26,8 @@ import { appendHandRecord } from '../storage/historyRepo';
 type Props = NativeStackScreenProps<RootStackParamList, 'Jeu'>;
 
 const CHIP_DENOMINATIONS = [5, 10, 25, 50];
+/** Sabot à 4 jeux de 52 cartes (208 cartes), pour limiter le risque d'épuiser le sabot avec des re-splits. */
+const DECK_COUNT = 4;
 
 const OUTCOME_LABEL: Record<Outcome, string> = {
   win: 'GAGNÉ',
@@ -95,7 +97,7 @@ export function JeuScreen({ route, navigation }: Props) {
   }
 
   function handleDeal() {
-    const dealt = gameReducer(createInitialGameState(stake, createShoe(1)), { type: 'DEAL' });
+    const dealt = gameReducer(createInitialGameState(stake, createShoe(DECK_COUNT)), { type: 'DEAL' });
     setGame(dealt);
     if (dealt.phase === 'settled') settle(dealt);
   }

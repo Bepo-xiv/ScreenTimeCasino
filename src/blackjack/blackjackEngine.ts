@@ -473,12 +473,15 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     // Sépare une paire (2 cartes de même valeur) en deux mains indépendantes, chacune misant
-    // le même montant. La première main reçoit aussitôt sa 2e carte ; la seconde ne recevra la
-    // sienne qu'à son tour. Les As séparés ne reçoivent qu'une seule carte chacun (règle standard).
+    // le même montant. La main active reçoit aussitôt sa 2e carte et garde sa place dans
+    // l'ordre de jeu ; la nouvelle main est insérée juste après elle, et ne recevra sa 2e
+    // carte qu'à son tour. Peut être refait autant de fois qu'une nouvelle paire identique
+    // apparaît (la condition économique, elle, est vérifiée côté écran). Les As séparés ne
+    // reçoivent qu'une seule carte chacun et ne peuvent donc plus être resplittés ensuite.
     case 'SPLIT': {
-      if (state.phase !== 'playerTurn' || state.playerHands.length >= 2) return state;
+      if (state.phase !== 'playerTurn') return state;
       const hand = activeHand(state);
-      if (hand.cards.length !== 2 || hand.cards[0].rank !== hand.cards[1].rank) return state;
+      if (hand.finished || hand.cards.length !== 2 || hand.cards[0].rank !== hand.cards[1].rank) return state;
 
       const [cardA, cardB] = hand.cards;
       const isSplitAces = cardA.rank === 'A';
@@ -492,13 +495,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       };
       const hand1: PlayerHandState = { cards: [cardB], doubled: false, finished: false, isSplitAces };
 
-      const nextState: GameState = {
-        ...state,
-        shoe: remaining,
-        playerHands: [hand0, hand1],
-        activeHandIndex: 0,
-        phase: 'playerTurn',
-      };
+      const playerHands = [
+        ...state.playerHands.slice(0, state.activeHandIndex),
+        hand0,
+        hand1,
+        ...state.playerHands.slice(state.activeHandIndex + 1),
+      ];
+
+      const nextState: GameState = { ...state, shoe: remaining, playerHands, phase: 'playerTurn' };
       return hand0.finished ? advance(nextState) : nextState;
     }
 
@@ -525,11 +529,12 @@ export function canDouble(state: GameState): boolean {
 }
 
 /**
- * Vrai si la main active peut être séparée : exactement 2 cartes de même valeur, et pas déjà
- * séparée une première fois (un seul split autorisé, pas de re-split).
+ * Vrai si la main active peut être séparée : exactement 2 cartes de même valeur. Peut être
+ * vrai plusieurs fois de suite (re-split) tant qu'une nouvelle paire identique se présente —
+ * la condition économique ("assez de temps pour doubler la mise") est vérifiée côté écran.
  */
 export function canSplit(state: GameState): boolean {
-  if (state.phase !== 'playerTurn' || state.playerHands.length >= 2) return false;
+  if (state.phase !== 'playerTurn') return false;
   const hand = activeHand(state);
   return !hand.finished && hand.cards.length === 2 && hand.cards[0].rank === hand.cards[1].rank;
 }
