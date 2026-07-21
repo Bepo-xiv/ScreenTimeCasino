@@ -8,7 +8,7 @@ interface Props {
 
 function colorFor(remaining: number): string {
   if (remaining <= 0) return casino.lose;
-  if (remaining <= 10) return casino.gold;
+  if (remaining <= 10) return casino.warning;
   return casino.win;
 }
 

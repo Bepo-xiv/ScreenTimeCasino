@@ -41,6 +41,9 @@ export const casino = {
   win: '#2fbf71',
   lose: '#e0334d',
   push: '#d4af37',
+
+  // Solde de temps intermédiaire (entre 0 et 10 min restantes).
+  warning: '#e08a2e',
 } as const;
 
 /** Style de texte argenté avec un léger reflet (à combiner avec fontSize/fontWeight au besoin). */
