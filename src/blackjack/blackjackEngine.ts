@@ -38,16 +38,36 @@ export type Outcome = 'win' | 'blackjack' | 'lose' | 'push';
 /** Étape actuelle de la partie : mise, tour du joueur, tour du croupier, ou main terminée. */
 export type GamePhase = 'betting' | 'playerTurn' | 'dealerTurn' | 'settled';
 
+/**
+ * Une main du joueur. Il n'y en a qu'une normalement, mais un split en crée une deuxième,
+ * chacune jouée et réglée indépendamment avec sa propre mise (state.stakeMinutes, identique
+ * pour les deux) et son propre doublage éventuel.
+ */
+export interface PlayerHandState {
+  cards: Card[];
+  doubled: boolean;
+  /** Vrai quand le joueur a fini de jouer cette main (elle a sauté, il est resté, ou a doublé). */
+  finished: boolean;
+  /**
+   * Vrai si cette main provient d'un split d'As : elle ne reçoit alors qu'une seule carte
+   * supplémentaire et ne peut plus être jouée ensuite (règle standard du blackjack).
+   */
+  isSplitAces: boolean;
+  /** Résultat et gain, connus seulement une fois la partie réglée (phase "settled"). */
+  outcome?: Outcome;
+  payoutMinutes?: number;
+}
+
 /** État complet d'une partie de blackjack à un instant donné. */
 export interface GameState {
   shoe: Card[];
-  playerHand: Hand;
+  playerHands: PlayerHandState[];
+  /** Index de la main en cours de jeu dans playerHands (change après un split). */
+  activeHandIndex: number;
   dealerHand: Hand;
   stakeMinutes: number;
   phase: GamePhase;
-  doubled: boolean;
-  outcome?: Outcome;
-  /** Delta net de minutes à appliquer au budget de l'app une fois la main réglée. */
+  /** Somme des gains/pertes de toutes les mains, connue une fois la partie réglée. */
   payoutMinutes?: number;
 }
 
@@ -56,7 +76,8 @@ export type GameAction =
   | { type: 'DEAL' }
   | { type: 'HIT' }
   | { type: 'STAND' }
-  | { type: 'DOUBLE' };
+  | { type: 'DOUBLE' }
+  | { type: 'SPLIT' };
 
 // ============================================================================
 // Création et mélange du jeu de cartes
@@ -270,41 +291,89 @@ export function payoutForOutcome(
 // Gestion de la partie (joueur et croupier)
 // ============================================================================
 
+function newHand(cards: Card[] = []): PlayerHandState {
+  return { cards, doubled: false, finished: false, isSplitAces: false };
+}
+
 /** Crée l'état initial d'une partie, avant toute distribution de cartes (phase "betting"). */
 export function createInitialGameState(stakeMinutes: number, shoe: Card[]): GameState {
   return {
     shoe,
-    playerHand: { cards: [] },
+    playerHands: [newHand()],
+    activeHandIndex: 0,
     dealerHand: { cards: [] },
     stakeMinutes,
     phase: 'betting',
-    doubled: false,
   };
 }
 
-/** Construit l'état final d'une main réglée (phase "settled") avec son résultat et son gain. */
-function settle(
-  state: GameState,
-  outcome: Outcome,
-  shoe: Card[],
-  playerCards: Card[],
-  dealerCards: Card[],
-): GameState {
-  return {
-    ...state,
-    shoe,
-    playerHand: { cards: playerCards },
-    dealerHand: { cards: dealerCards },
-    phase: 'settled',
-    outcome,
-    payoutMinutes: payoutForOutcome(outcome, state.stakeMinutes, state.doubled),
-  };
+function activeHand(state: GameState): PlayerHandState {
+  return state.playerHands[state.activeHandIndex];
+}
+
+/** Retourne playerHands avec la main active remplacée par `hand`. */
+function withActiveHand(state: GameState, hand: PlayerHandState): PlayerHandState[] {
+  return state.playerHands.map((h, i) => (i === state.activeHandIndex ? hand : h));
 }
 
 /**
- * Le reducer principal du jeu : à partir d'un état et d'une action (DEAL, HIT, STAND, DOUBLE),
- * calcule le nouvel état de la partie. Gère la distribution initiale (avec vérification des
- * blackjacks naturels), les tirages du joueur, le tour du croupier, et le double.
+ * Une fois la main active terminée (sautée, restée, ou doublée), passe à la main suivante
+ * issue d'un split si elle existe (en lui distribuant sa 2e carte, et en la terminant aussitôt
+ * si elle vient d'un split d'As), ou fait jouer le croupier et règle la partie s'il n'y a plus
+ * de main à jouer.
+ */
+function advance(state: GameState): GameState {
+  let index = state.activeHandIndex + 1;
+  let hands = state.playerHands;
+  let shoe = state.shoe;
+
+  while (index < hands.length) {
+    let hand = hands[index];
+    if (hand.cards.length === 1) {
+      const { card, remaining } = drawCard(shoe);
+      hand = { ...hand, cards: [...hand.cards, card], finished: hand.isSplitAces };
+      shoe = remaining;
+      hands = hands.map((h, i) => (i === index ? hand : h));
+    }
+    if (!hand.finished) {
+      return { ...state, playerHands: hands, shoe, activeHandIndex: index, phase: 'playerTurn' };
+    }
+    index++;
+  }
+
+  return resolveRound({ ...state, playerHands: hands, shoe });
+}
+
+/**
+ * Fait jouer le croupier une seule fois, puis détermine le résultat et le gain de chaque main
+ * du joueur face à lui (une main déjà sautée reste perdante quel que soit le jeu du croupier).
+ * Si toutes les mains ont sauté, le croupier ne tire pas : le résultat est déjà joué.
+ */
+function resolveRound(state: GameState): GameState {
+  const dealerNeedsToPlay = state.playerHands.some(hand => !isBust(hand.cards));
+  const { hand: dealerHand, shoe } = dealerNeedsToPlay
+    ? dealerPlay(state.dealerHand, state.shoe)
+    : { hand: state.dealerHand, shoe: state.shoe };
+
+  const playerHands = state.playerHands.map(hand => {
+    const outcome = resolveOutcome({
+      playerHand: { cards: hand.cards },
+      dealerHand,
+      playerHasNatural: false,
+      dealerHasNatural: false,
+    });
+    return { ...hand, outcome, payoutMinutes: payoutForOutcome(outcome, state.stakeMinutes, hand.doubled) };
+  });
+
+  const payoutMinutes = playerHands.reduce((sum, hand) => sum + (hand.payoutMinutes ?? 0), 0);
+
+  return { ...state, shoe, dealerHand, playerHands, phase: 'settled', payoutMinutes };
+}
+
+/**
+ * Le reducer principal du jeu : à partir d'un état et d'une action (DEAL, HIT, STAND, DOUBLE,
+ * SPLIT), calcule le nouvel état de la partie. Gère la distribution initiale (avec vérification
+ * des blackjacks naturels), les tirages du joueur, le split, le tour du croupier et le règlement.
  */
 export function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
@@ -335,69 +404,102 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           playerHasNatural,
           dealerHasNatural,
         });
-        return settle(state, outcome, shoe, playerCards, dealerCards);
+        const hand: PlayerHandState = {
+          ...newHand(playerCards),
+          finished: true,
+          outcome,
+          payoutMinutes: payoutForOutcome(outcome, state.stakeMinutes, false),
+        };
+        return {
+          ...state,
+          shoe,
+          playerHands: [hand],
+          dealerHand: { cards: dealerCards },
+          phase: 'settled',
+          payoutMinutes: hand.payoutMinutes,
+        };
       }
 
       return {
         ...state,
         shoe,
-        playerHand: { cards: playerCards },
+        playerHands: [newHand(playerCards)],
+        activeHandIndex: 0,
         dealerHand: { cards: dealerCards },
         phase: 'playerTurn',
       };
     }
 
-    // Le joueur tire une carte supplémentaire. S'il dépasse 21, il perd immédiatement.
+    // Le joueur tire une carte supplémentaire sur sa main active. S'il dépasse 21, elle est
+    // terminée (perdante) et on passe à la main suivante (split) ou on règle la partie.
     case 'HIT': {
       if (state.phase !== 'playerTurn') return state;
+      const hand = activeHand(state);
       const { card, remaining } = drawCard(state.shoe);
-      const playerCards = [...state.playerHand.cards, card];
-      if (isBust(playerCards)) {
-        return settle(state, 'lose', remaining, playerCards, state.dealerHand.cards);
-      }
-      return {
+      const cards = [...hand.cards, card];
+      const busted = isBust(cards);
+      const nextState = {
         ...state,
         shoe: remaining,
-        playerHand: { cards: playerCards },
-        phase: 'playerTurn',
+        playerHands: withActiveHand(state, { ...hand, cards, finished: busted }),
       };
+      return busted ? advance(nextState) : nextState;
     }
 
-    // Le joueur double sa mise : il ne peut le faire qu'au tout premier coup (2 cartes,
-    // jamais doublé). Il pioche exactement une carte de plus, puis c'est au croupier de jouer.
+    // Le joueur double sa mise sur la main active : possible seulement au premier coup (2
+    // cartes, jamais doublé). Il pioche exactement une carte de plus, puis la main est terminée.
     case 'DOUBLE': {
-      if (state.phase !== 'playerTurn' || state.playerHand.cards.length !== 2 || state.doubled) {
-        return state;
-      }
+      if (state.phase !== 'playerTurn') return state;
+      const hand = activeHand(state);
+      if (hand.cards.length !== 2 || hand.doubled) return state;
+
       const { card, remaining } = drawCard(state.shoe);
-      const playerCards = [...state.playerHand.cards, card];
-      const doubledState = { ...state, doubled: true };
-
-      if (isBust(playerCards)) {
-        return settle(doubledState, 'lose', remaining, playerCards, state.dealerHand.cards);
-      }
-
-      const { hand: dealerHand, shoe: shoeAfterDealer } = dealerPlay(state.dealerHand, remaining);
-      const outcome = resolveOutcome({
-        playerHand: { cards: playerCards },
-        dealerHand,
-        playerHasNatural: false,
-        dealerHasNatural: false,
-      });
-      return settle(doubledState, outcome, shoeAfterDealer, playerCards, dealerHand.cards);
+      const cards = [...hand.cards, card];
+      const nextState = {
+        ...state,
+        shoe: remaining,
+        playerHands: withActiveHand(state, { ...hand, cards, doubled: true, finished: true }),
+      };
+      return advance(nextState);
     }
 
-    // Le joueur reste sur sa main actuelle : le croupier joue son tour puis la main est réglée.
+    // Le joueur reste sur sa main active : elle est terminée, on passe à la suivante (split)
+    // ou on fait jouer le croupier et on règle la partie.
     case 'STAND': {
       if (state.phase !== 'playerTurn') return state;
-      const { hand: dealerHand, shoe } = dealerPlay(state.dealerHand, state.shoe);
-      const outcome = resolveOutcome({
-        playerHand: state.playerHand,
-        dealerHand,
-        playerHasNatural: false,
-        dealerHasNatural: false,
-      });
-      return settle(state, outcome, shoe, state.playerHand.cards, dealerHand.cards);
+      const hand = activeHand(state);
+      const nextState = { ...state, playerHands: withActiveHand(state, { ...hand, finished: true }) };
+      return advance(nextState);
+    }
+
+    // Sépare une paire (2 cartes de même valeur) en deux mains indépendantes, chacune misant
+    // le même montant. La première main reçoit aussitôt sa 2e carte ; la seconde ne recevra la
+    // sienne qu'à son tour. Les As séparés ne reçoivent qu'une seule carte chacun (règle standard).
+    case 'SPLIT': {
+      if (state.phase !== 'playerTurn' || state.playerHands.length >= 2) return state;
+      const hand = activeHand(state);
+      if (hand.cards.length !== 2 || hand.cards[0].rank !== hand.cards[1].rank) return state;
+
+      const [cardA, cardB] = hand.cards;
+      const isSplitAces = cardA.rank === 'A';
+      const { card: extraCard, remaining } = drawCard(state.shoe);
+
+      const hand0: PlayerHandState = {
+        cards: [cardA, extraCard],
+        doubled: false,
+        finished: isSplitAces,
+        isSplitAces,
+      };
+      const hand1: PlayerHandState = { cards: [cardB], doubled: false, finished: false, isSplitAces };
+
+      const nextState: GameState = {
+        ...state,
+        shoe: remaining,
+        playerHands: [hand0, hand1],
+        activeHandIndex: 0,
+        phase: 'playerTurn',
+      };
+      return hand0.finished ? advance(nextState) : nextState;
     }
 
     default:
@@ -405,17 +507,29 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
   }
 }
 
-/** Vrai si le joueur peut encore tirer une carte (uniquement pendant son tour). */
+/** Vrai si le joueur peut encore tirer une carte sur la main active. */
 export function canHit(state: GameState): boolean {
-  return state.phase === 'playerTurn';
+  return state.phase === 'playerTurn' && !activeHand(state).finished;
 }
 
-/** Vrai si le joueur peut rester sur sa main actuelle (uniquement pendant son tour). */
+/** Vrai si le joueur peut rester sur sa main active. */
 export function canStand(state: GameState): boolean {
-  return state.phase === 'playerTurn';
+  return state.phase === 'playerTurn' && !activeHand(state).finished;
 }
 
-/** Vrai si le joueur peut doubler sa mise (seulement au premier coup, avec 2 cartes, jamais doublé). */
+/** Vrai si le joueur peut doubler sa mise sur la main active (2 cartes, jamais doublé). */
 export function canDouble(state: GameState): boolean {
-  return state.phase === 'playerTurn' && state.playerHand.cards.length === 2 && !state.doubled;
+  if (state.phase !== 'playerTurn') return false;
+  const hand = activeHand(state);
+  return !hand.finished && hand.cards.length === 2 && !hand.doubled;
+}
+
+/**
+ * Vrai si la main active peut être séparée : exactement 2 cartes de même valeur, et pas déjà
+ * séparée une première fois (un seul split autorisé, pas de re-split).
+ */
+export function canSplit(state: GameState): boolean {
+  if (state.phase !== 'playerTurn' || state.playerHands.length >= 2) return false;
+  const hand = activeHand(state);
+  return !hand.finished && hand.cards.length === 2 && hand.cards[0].rank === hand.cards[1].rank;
 }

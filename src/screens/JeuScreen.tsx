@@ -10,6 +10,7 @@ import { HandRow } from '../components/HandRow';
 import {
   canDouble,
   canHit,
+  canSplit,
   canStand,
   createInitialGameState,
   createShoe,
@@ -27,9 +28,9 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Jeu'>;
 const CHIP_DENOMINATIONS = [5, 10, 25, 50];
 
 const OUTCOME_LABEL: Record<Outcome, string> = {
-  win: 'VOUS GAGNEZ',
+  win: 'GAGNÉ',
   blackjack: 'BLACKJACK !',
-  lose: 'VOUS PERDEZ',
+  lose: 'PERDU',
   push: 'ÉGALITÉ',
 };
 
@@ -46,7 +47,6 @@ export function JeuScreen({ route, navigation }: Props) {
   const [status, setStatus] = useState<StakingStatus | null>(null);
   const [stake, setStake] = useState(MIN_STAKE);
   const [game, setGame] = useState<GameState | null>(null);
-  const [lastPayout, setLastPayout] = useState<number | null>(null);
 
   const refresh = useCallback(async () => {
     setApp(getManagedApp(packageName));
@@ -74,29 +74,33 @@ export function JeuScreen({ route, navigation }: Props) {
     navigation.setOptions({ title: app?.label ?? 'Blackjack' });
   }, [navigation, app]);
 
+  // Applique le résultat de chaque main (une seule, ou deux après un split) au solde, dans
+  // l'ordre, puis journalise chacune séparément dans l'historique.
   async function settle(next: GameState) {
-    const { payoutMinutes } = await applyHandResult(packageName, next.outcome!, next.stakeMinutes, next.doubled);
+    for (const hand of next.playerHands) {
+      await applyHandResult(packageName, hand.outcome!, next.stakeMinutes, hand.doubled);
+    }
     const nextStatus = await getStakingStatus(packageName);
-    appendHandRecord({
-      packageName,
-      stakeMinutes: next.stakeMinutes,
-      doubled: next.doubled,
-      outcome: next.outcome!,
-      payoutMinutes,
-      resultingRemaining: nextStatus.remainingMinutes,
-    });
-    setLastPayout(payoutMinutes);
+    for (const hand of next.playerHands) {
+      appendHandRecord({
+        packageName,
+        stakeMinutes: next.stakeMinutes,
+        doubled: hand.doubled,
+        outcome: hand.outcome!,
+        payoutMinutes: hand.payoutMinutes!,
+        resultingRemaining: nextStatus.remainingMinutes,
+      });
+    }
     setStatus(nextStatus);
   }
 
   function handleDeal() {
     const dealt = gameReducer(createInitialGameState(stake, createShoe(1)), { type: 'DEAL' });
     setGame(dealt);
-    setLastPayout(null);
     if (dealt.phase === 'settled') settle(dealt);
   }
 
-  function act(action: 'HIT' | 'STAND' | 'DOUBLE') {
+  function act(action: 'HIT' | 'STAND' | 'DOUBLE' | 'SPLIT') {
     if (!game) return;
     const next = gameReducer(game, { type: action });
     setGame(next);
@@ -108,6 +112,9 @@ export function JeuScreen({ route, navigation }: Props) {
   }
 
   if (!status) return null;
+
+  const split = game && game.playerHands.length > 1;
+  const splitAffordable = game ? game.stakeMinutes * 2 <= status.maxStake : false;
 
   return (
     <View style={styles.container}>
@@ -122,19 +129,30 @@ export function JeuScreen({ route, navigation }: Props) {
       {game ? (
         <>
           <HandRow cards={game.dealerHand.cards} label="Croupier" hideAllButFirst={game.phase === 'playerTurn'} />
-          <HandRow cards={game.playerHand.cards} label="Vous" />
 
-          {game.phase === 'settled' && (
-            <View style={styles.outcomeBox}>
-              <Text style={[styles.outcomeText, { color: OUTCOME_COLOR[game.outcome!] }]}>
-                {OUTCOME_LABEL[game.outcome!]}
-              </Text>
-              <Text style={styles.payoutText}>
-                {lastPayout !== null && lastPayout >= 0 ? '+' : ''}
-                {lastPayout ?? 0} min
-              </Text>
-            </View>
-          )}
+          <View style={styles.playerHands}>
+            {game.playerHands.map((hand, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.playerHandColumn,
+                  split && game.phase === 'playerTurn' && i === game.activeHandIndex && styles.activeHandColumn,
+                ]}>
+                <HandRow cards={hand.cards} label={split ? `Main ${i + 1}` : 'Vous'} />
+                {game.phase === 'settled' && hand.outcome && (
+                  <View style={styles.outcomeBox}>
+                    <Text style={[styles.outcomeText, { color: OUTCOME_COLOR[hand.outcome] }]}>
+                      {OUTCOME_LABEL[hand.outcome]}
+                    </Text>
+                    <Text style={styles.payoutText}>
+                      {hand.payoutMinutes! >= 0 ? '+' : ''}
+                      {hand.payoutMinutes} min
+                    </Text>
+                  </View>
+                )}
+              </View>
+            ))}
+          </View>
 
           <View style={styles.actions}>
             {game.phase === 'playerTurn' && (
@@ -146,6 +164,13 @@ export function JeuScreen({ route, navigation }: Props) {
                   onPress={() => act('DOUBLE')}
                   disabled={!canDouble(game) || status.usingGrace}
                 />
+                {canSplit(game) && (
+                  <ActionButton
+                    label="Séparer"
+                    onPress={() => act('SPLIT')}
+                    disabled={status.usingGrace || !splitAffordable}
+                  />
+                )}
               </>
             )}
             {game.phase === 'settled' && <ActionButton label="Rejouer" onPress={handlePlayAgain} primary />}
@@ -289,20 +314,35 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     textAlign: 'center',
   },
+  playerHands: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+  },
+  playerHandColumn: {
+    paddingHorizontal: 8,
+    borderRadius: 12,
+  },
+  activeHandColumn: {
+    backgroundColor: 'rgba(212, 175, 55, 0.12)',
+    borderWidth: 1,
+    borderColor: casino.gold,
+  },
   outcomeBox: {
     alignItems: 'center',
-    marginVertical: 12,
+    marginTop: -4,
+    marginBottom: 8,
   },
   outcomeText: {
-    fontSize: 26,
+    fontSize: 18,
     fontWeight: '900',
-    letterSpacing: 1,
+    letterSpacing: 0.5,
   },
   payoutText: {
     ...silverTextStyle,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
-    marginTop: 4,
+    marginTop: 2,
   },
   actions: {
     flexDirection: 'row',
