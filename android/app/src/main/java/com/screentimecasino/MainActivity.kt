@@ -1,5 +1,6 @@
 package com.screentimecasino
 
+import android.content.Intent
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
@@ -19,4 +20,15 @@ class MainActivity : ReactActivity() {
    */
   override fun createReactActivityDelegate(): ReactActivityDelegate =
       DefaultReactActivityDelegate(this, mainComponentName, fabricEnabled)
+
+  /**
+   * Needed for the screentimecasino:// deep link (from BlockingActivity) to route correctly on
+   * a *warm* start (app already running in the background) — without updating the held intent,
+   * some Linking/React Navigation resolution paths that check the Activity's current intent can
+   * silently miss the URL even though a cold start works fine.
+   */
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+  }
 }

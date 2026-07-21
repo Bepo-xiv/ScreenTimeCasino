@@ -1,4 +1,4 @@
-import { appStorage } from './mmkv';
+import { appStorage, blockState } from './mmkv';
 
 export interface ManagedApp {
   packageName: string;
@@ -10,13 +10,29 @@ export interface ManagedApp {
 
 const MANAGED_APPS_KEY = 'config:managedApps';
 
+/**
+ * La liste des apps gérées vivait auparavant dans `appStorage` (mono-processus). Elle doit
+ * maintenant vivre dans `blockState` (multi-processus) pour que le futur service natif de
+ * blocage puisse la lire directement. Migration à usage unique : si `blockState` n'a encore
+ * rien sous cette clé, on recopie ce qui existait dans `appStorage`, sans jamais supprimer
+ * l'ancienne clé (une clé orpheline est inoffensive, une suppression ratée ne l'est pas).
+ */
+function migrateFromLegacyStorageIfNeeded(): void {
+  if (blockState.getString(MANAGED_APPS_KEY) != null) return;
+  const legacy = appStorage.getString(MANAGED_APPS_KEY);
+  if (legacy != null) {
+    blockState.set(MANAGED_APPS_KEY, legacy);
+  }
+}
+migrateFromLegacyStorageIfNeeded();
+
 function readAll(): ManagedApp[] {
-  const raw = appStorage.getString(MANAGED_APPS_KEY);
+  const raw = blockState.getString(MANAGED_APPS_KEY);
   return raw ? (JSON.parse(raw) as ManagedApp[]) : [];
 }
 
 function writeAll(apps: ManagedApp[]): void {
-  appStorage.set(MANAGED_APPS_KEY, JSON.stringify(apps));
+  blockState.set(MANAGED_APPS_KEY, JSON.stringify(apps));
 }
 
 export function getManagedApps(): ManagedApp[] {

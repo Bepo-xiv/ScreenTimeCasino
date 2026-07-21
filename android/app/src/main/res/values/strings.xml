@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Screen Time Casino</string>
+    <string name="accessibility_service_description">Bloque une application dont le temps quotidien est épuisé et te renvoie vers Screen Time Casino pour regagner du temps au blackjack.</string>
 </resources>

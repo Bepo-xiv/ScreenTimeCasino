@@ -45,6 +45,46 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
+        <!-- Deep link used by BlockingActivity to redirect back into the blackjack table. -->
+        <intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="screentimecasino" />
+        </intent-filter>
       </activity>
+
+      <!--
+        Full-screen interrupt shown when a managed app whose time is exhausted is opened. Plain
+        Activity, no RN dependency, runs in the same isolated process as the accessibility
+        service so it works even if the main RN process is dead.
+      -->
+      <activity
+        android:name=".blocking.BlockingActivity"
+        android:process=":blocking"
+        android:exported="false"
+        android:launchMode="singleInstance"
+        android:taskAffinity=""
+        android:excludeFromRecents="true"
+        android:theme="@style/AppTheme" />
+
+      <!--
+        Watches foreground-app changes system-wide to detect when a managed, time-exhausted app
+        is opened. Runs in its own process for crash isolation from the main RN process (see
+        MainApplication's process guard). exported="true" is required for system_server to bind
+        it at all, despite BIND_ACCESSIBILITY_SERVICE also being declared.
+      -->
+      <service
+        android:name=".blocking.BlockAccessibilityService"
+        android:process=":blocking"
+        android:exported="true"
+        android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+        <intent-filter>
+            <action android:name="android.accessibilityservice.AccessibilityService" />
+        </intent-filter>
+        <meta-data
+            android:name="android.accessibilityservice"
+            android:resource="@xml/accessibility_service_config" />
+      </service>
     </application>
 </manifest>

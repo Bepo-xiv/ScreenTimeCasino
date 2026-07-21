@@ -1,7 +1,6 @@
 package com.screentimecasino.usagestats
 
 import android.app.AppOpsManager
-import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.os.Process
@@ -10,7 +9,6 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
-import java.util.Calendar
 
 /**
  * Native bridge giving the JS side (see src/blackjack/screenTimeTracker.ts) access to real
@@ -59,29 +57,7 @@ class UsageStatsModule(reactContext: ReactApplicationContext) :
   @ReactMethod
   fun getUsageMinutesToday(packageName: String, promise: Promise) {
     try {
-      val usageStatsManager =
-        reactApplicationContext.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-
-      val startOfDay = Calendar.getInstance().apply {
-        set(Calendar.HOUR_OF_DAY, 0)
-        set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
-      }.timeInMillis
-      val now = System.currentTimeMillis()
-
-      val stats = usageStatsManager.queryUsageStats(
-        UsageStatsManager.INTERVAL_DAILY,
-        startOfDay,
-        now,
-      )
-
-      val totalForegroundMillis = stats
-        ?.filter { it.packageName == packageName }
-        ?.sumOf { it.totalTimeInForeground }
-        ?: 0L
-
-      promise.resolve((totalForegroundMillis / 60_000L).toInt())
+      promise.resolve(UsageStatsReader.getUsageMinutesToday(reactApplicationContext, packageName))
     } catch (error: Exception) {
       promise.reject("USAGE_STATS_ERROR", error)
     }

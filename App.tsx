@@ -25,6 +25,19 @@ import { casino } from './src/theme/casinoTheme';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+/**
+ * Permet à BlockingActivity (natif, voir android/.../blocking/) de renvoyer directement vers
+ * la table de blackjack d'une app bloquée via `screentimecasino://jeu/<packageName>`.
+ */
+const linking = {
+  prefixes: ['screentimecasino://'],
+  config: {
+    screens: {
+      Jeu: 'jeu/:packageName',
+    },
+  },
+};
+
 /** Thème "casino prestige" appliqué par React Navigation (en-têtes, fond, texte). */
 const navigationTheme = {
   dark: true,
@@ -48,7 +61,7 @@ function App() {
   return (
     <SafeAreaProvider>
       <StatusBar barStyle="light-content" backgroundColor={casino.background} />
-      <NavigationContainer theme={navigationTheme}>
+      <NavigationContainer theme={navigationTheme} linking={linking}>
         <Stack.Navigator
           screenOptions={{
             headerStyle: { backgroundColor: casino.background },

@@ -116,4 +116,10 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+
+    // Same native MMKV coordinate react-native-mmkv itself depends on (see its own
+    // android/build.gradle) — lets plain Kotlin code (BlockStateStore) open the exact same
+    // MULTI_PROCESS_MODE store the JS side writes to, independent of the RN bridge being alive.
+    // Keep this pinned to whatever version react-native-mmkv declares if that package is upgraded.
+    implementation "io.github.zhongwuzw:mmkv:2.4.1"
 }

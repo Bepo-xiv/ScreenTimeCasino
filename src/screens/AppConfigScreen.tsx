@@ -1,9 +1,10 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { AppIcon } from '../components/AppIcon';
 import { checkUsageAccessPermission, requestUsageAccessPermission } from '../blackjack/screenTimeTracker';
+import { checkAccessibilityServiceEnabled, debugEvaluateLockout, requestAccessibilityService } from '../native/BlockingBridge';
 import type { RootStackParamList } from '../navigation/types';
 import { casino, silverTextStyle } from '../theme/casinoTheme';
 import { getManagedApps, removeManagedApp, updateManagedApp, type ManagedApp } from '../storage/configRepo';
@@ -15,10 +16,12 @@ const BUDGET_STEP = 5;
 export function AppConfigScreen({ navigation }: Props) {
   const [apps, setApps] = useState<ManagedApp[]>([]);
   const [hasUsageAccess, setHasUsageAccess] = useState(true);
+  const [hasAccessibilityService, setHasAccessibilityService] = useState(true);
 
   const load = useCallback(() => {
     setApps(getManagedApps());
     checkUsageAccessPermission().then(setHasUsageAccess);
+    checkAccessibilityServiceEnabled().then(setHasAccessibilityService);
   }, []);
 
   useFocusEffect(load);
@@ -31,6 +34,11 @@ export function AppConfigScreen({ navigation }: Props) {
     load();
   }
 
+  async function debugApp(packageName: string) {
+    const json = await debugEvaluateLockout(packageName);
+    Alert.alert('Debug blocage', json);
+  }
+
   return (
     <View style={styles.container}>
       {!hasUsageAccess && (
@@ -39,6 +47,15 @@ export function AppConfigScreen({ navigation }: Props) {
           <Text style={styles.permissionBody}>
             Sans cette permission, le temps d'écran réel ne peut pas être lu. Appuie ici pour l'activer
             dans les réglages.
+          </Text>
+        </Pressable>
+      )}
+      {!hasAccessibilityService && (
+        <Pressable style={styles.permissionBanner} onPress={requestAccessibilityService}>
+          <Text style={styles.permissionTitle}>Activer le blocage réel des applications</Text>
+          <Text style={styles.permissionBody}>
+            Sans ce service d'accessibilité, une app à temps épuisé reste utilisable. Appuie ici pour
+            l'activer dans les réglages.
           </Text>
         </Pressable>
       )}
@@ -69,6 +86,9 @@ export function AppConfigScreen({ navigation }: Props) {
                   <Text style={styles.stepperGlyph}>+</Text>
                 </Pressable>
               </View>
+              <Pressable onPress={() => debugApp(item.packageName)} hitSlop={8}>
+                <Text style={styles.debugLink}>Debug blocage</Text>
+              </Pressable>
             </View>
             <Pressable
               onPress={() => {
@@ -164,6 +184,12 @@ const styles = StyleSheet.create({
     ...silverTextStyle,
     fontSize: 13,
     marginHorizontal: 10,
+  },
+  debugLink: {
+    color: casino.goldMuted,
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 6,
   },
   remove: {
     color: casino.lose,
