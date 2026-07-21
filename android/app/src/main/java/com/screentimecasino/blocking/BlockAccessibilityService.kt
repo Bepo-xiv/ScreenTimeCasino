@@ -2,7 +2,10 @@ package com.screentimecasino.blocking
 
 import android.accessibilityservice.AccessibilityService
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
+import android.widget.Toast
 
 /**
  * Watches for foreground-app changes system-wide and redirects into BlockingActivity whenever
@@ -15,6 +18,7 @@ class BlockAccessibilityService : AccessibilityService() {
 
   /** Tracks the last foreground package so we only re-evaluate on an actual app switch. */
   private var lastForegroundPackage: String? = null
+  private val mainHandler = Handler(Looper.getMainLooper())
 
   override fun onAccessibilityEvent(event: AccessibilityEvent?) {
     if (event == null || event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
@@ -30,8 +34,18 @@ class BlockAccessibilityService : AccessibilityService() {
     lastForegroundPackage = packageName
 
     val result = LockoutEvaluator.evaluate(applicationContext, packageName)
+    // TEMPORARY diagnostic: this environment has no adb/logcat access, so this toast is the
+    // only way to see, live on the device, whether the service receives events at all and what
+    // it computes for each app switch. Remove once real blocking is confirmed working.
+    showDebugToast("pkg=$packageName blocked=${result.isBlocked} label=${result.label}")
     if (result.isBlocked) {
       launchBlockingActivity(packageName, result.label)
+    }
+  }
+
+  private fun showDebugToast(message: String) {
+    mainHandler.post {
+      Toast.makeText(applicationContext, message, Toast.LENGTH_SHORT).show()
     }
   }
 
