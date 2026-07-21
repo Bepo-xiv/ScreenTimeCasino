@@ -12,13 +12,20 @@ type Props = NativeStackScreenProps<RootStackParamList, 'AddManagedApp'>;
 const DEFAULT_BUDGET_MINUTES = 30;
 
 export function AddManagedAppScreen({ navigation }: Props) {
-  const [candidates, setCandidates] = useState<InstalledApp[]>([]);
+  const [candidates, setCandidates] = useState<InstalledApp[] | null>(null);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     (async () => {
-      const [installed, managed] = [await usageStatsBridge.getInstalledLaunchableApps(), getManagedApps()];
-      const managedPackages = new Set(managed.map(a => a.packageName));
-      setCandidates(installed.filter(app => !managedPackages.has(app.packageName)));
+      try {
+        const installed = await usageStatsBridge.getInstalledLaunchableApps();
+        const managedPackages = new Set(getManagedApps().map(a => a.packageName));
+        setCandidates(installed.filter(app => !managedPackages.has(app.packageName)));
+      } catch (err) {
+        console.error('Failed to list installed apps', err);
+        setError(true);
+        setCandidates([]);
+      }
     })();
   }, []);
 
@@ -30,10 +37,18 @@ export function AddManagedAppScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       <FlatList
-        data={candidates}
+        data={candidates ?? []}
         keyExtractor={app => app.packageName}
         contentContainerStyle={styles.list}
-        ListEmptyComponent={<Text style={styles.emptyText}>Toutes les applications sont déjà gérées.</Text>}
+        ListEmptyComponent={
+          candidates === null ? null : (
+            <Text style={styles.emptyText}>
+              {error
+                ? 'Impossible de charger les applications installées. Réessaie plus tard.'
+                : 'Toutes les applications sont déjà gérées.'}
+            </Text>
+          )
+        }
         renderItem={({ item }) => (
           <Pressable style={styles.row} onPress={() => handleAdd(item)}>
             <View style={styles.icon}>

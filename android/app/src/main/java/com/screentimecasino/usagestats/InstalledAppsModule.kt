@@ -40,17 +40,27 @@ class InstalledAppsModule(reactContext: ReactApplicationContext) :
       val result: WritableArray = Arguments.createArray()
 
       for (info in resolved) {
-        val packageName = info.activityInfo.packageName
-        if (packageName == ownPackageName || !seenPackages.add(packageName)) continue
+        // One misbehaving app (a weird icon resource, a missing label, ...) must not take
+        // down the whole list — skip just that entry and keep going.
+        try {
+          val packageName = info.activityInfo.packageName
+          if (packageName == ownPackageName || !seenPackages.add(packageName)) continue
 
-        val label = info.loadLabel(packageManager).toString()
-        val iconUri = cacheIcon(iconsDir, packageName, info.loadIcon(packageManager))
+          val label = info.loadLabel(packageManager).toString()
+          val iconUri = try {
+            cacheIcon(iconsDir, packageName, info.loadIcon(packageManager))
+          } catch (iconError: Exception) {
+            "📱"
+          }
 
-        val entry = Arguments.createMap()
-        entry.putString("packageName", packageName)
-        entry.putString("label", label)
-        entry.putString("icon", iconUri)
-        result.pushMap(entry)
+          val entry = Arguments.createMap()
+          entry.putString("packageName", packageName)
+          entry.putString("label", label)
+          entry.putString("icon", iconUri)
+          result.pushMap(entry)
+        } catch (perAppError: Exception) {
+          continue
+        }
       }
 
       promise.resolve(result)
@@ -70,7 +80,16 @@ class InstalledAppsModule(reactContext: ReactApplicationContext) :
   }
 
   private fun drawableToBitmap(drawable: Drawable): Bitmap {
-    if (drawable is BitmapDrawable) return drawable.bitmap
+    if (drawable is BitmapDrawable) {
+      val bitmap = drawable.bitmap
+      // Icons are frequently backed by a HARDWARE-config bitmap (GPU-only memory), which
+      // Bitmap.compress() cannot read directly — must be copied to a normal software config first.
+      return if (bitmap.config == Bitmap.Config.HARDWARE) {
+        bitmap.copy(Bitmap.Config.ARGB_8888, false)
+      } else {
+        bitmap
+      }
+    }
 
     val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 96
     val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 96
