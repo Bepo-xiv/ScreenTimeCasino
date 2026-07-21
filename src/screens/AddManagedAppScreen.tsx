@@ -1,6 +1,7 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppIcon } from '../components/AppIcon';
 import { usageStatsBridge, type InstalledApp } from '../native/UsageStatsBridge';
 import type { RootStackParamList } from '../navigation/types';
 import { casino } from '../theme/casinoTheme';
@@ -35,7 +36,9 @@ export function AddManagedAppScreen({ navigation }: Props) {
         ListEmptyComponent={<Text style={styles.emptyText}>Toutes les applications sont déjà gérées.</Text>}
         renderItem={({ item }) => (
           <Pressable style={styles.row} onPress={() => handleAdd(item)}>
-            <Text style={styles.icon}>{item.icon}</Text>
+            <View style={styles.icon}>
+              <AppIcon icon={item.icon} size={28} />
+            </View>
             <Text style={styles.label}>{item.label}</Text>
           </Pressable>
         )}
@@ -69,7 +72,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   icon: {
-    fontSize: 28,
     marginRight: 14,
   },
   label: {

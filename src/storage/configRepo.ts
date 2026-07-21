@@ -3,30 +3,16 @@ import { appStorage } from './mmkv';
 export interface ManagedApp {
   packageName: string;
   label: string;
-  /**
-   * Mock milestone (M1-M3): an emoji placeholder. Once the real Usage Stats native module
-   * lands (M4) this becomes a `file://` URI to a cached app icon — callers should render
-   * either transparently by checking for the `file://` prefix.
-   */
+  /** Une URI `file://` vers l'icône réelle de l'app, mise en cache côté natif. */
   icon: string;
   baseBudgetMinutes: number;
 }
 
 const MANAGED_APPS_KEY = 'config:managedApps';
 
-const DEFAULT_MANAGED_APPS: ManagedApp[] = [
-  { packageName: 'com.instagram.android', label: 'Instagram', icon: '📷', baseBudgetMinutes: 45 },
-  { packageName: 'com.zhiliaoapp.musically', label: 'TikTok', icon: '🎵', baseBudgetMinutes: 30 },
-  { packageName: 'com.google.android.youtube', label: 'YouTube', icon: '▶️', baseBudgetMinutes: 60 },
-];
-
 function readAll(): ManagedApp[] {
   const raw = appStorage.getString(MANAGED_APPS_KEY);
-  if (!raw) {
-    appStorage.set(MANAGED_APPS_KEY, JSON.stringify(DEFAULT_MANAGED_APPS));
-    return DEFAULT_MANAGED_APPS;
-  }
-  return JSON.parse(raw) as ManagedApp[];
+  return raw ? (JSON.parse(raw) as ManagedApp[]) : [];
 }
 
 function writeAll(apps: ManagedApp[]): void {

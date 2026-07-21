@@ -2,6 +2,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import type { Outcome } from '../blackjack/blackjackEngine';
+import { AppIcon } from '../components/AppIcon';
 import { casino } from '../theme/casinoTheme';
 import { getManagedApp } from '../storage/configRepo';
 import { getHistory, type HandRecord } from '../storage/historyRepo';
@@ -69,7 +70,9 @@ export function HistoriqueScreen() {
           const app = getManagedApp(item.packageName);
           return (
             <View style={styles.row}>
-              <Text style={styles.icon}>{app?.icon ?? '🎰'}</Text>
+              <View style={styles.icon}>
+                <AppIcon icon={app?.icon ?? '🎰'} size={26} />
+              </View>
               <View style={styles.info}>
                 <Text style={styles.label}>{app?.label ?? item.packageName}</Text>
                 <Text style={styles.meta}>
@@ -146,7 +149,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   icon: {
-    fontSize: 26,
     marginRight: 12,
   },
   info: {

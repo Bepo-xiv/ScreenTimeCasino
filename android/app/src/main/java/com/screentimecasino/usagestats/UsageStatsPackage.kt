@@ -8,7 +8,7 @@ import com.facebook.react.uimanager.ViewManager
 /** Registers UsageStatsModule as a native module available to the JS side. */
 class UsageStatsPackage : ReactPackage {
   override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
-    return listOf(UsageStatsModule(reactContext))
+    return listOf(UsageStatsModule(reactContext), InstalledAppsModule(reactContext))
   }
 
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {

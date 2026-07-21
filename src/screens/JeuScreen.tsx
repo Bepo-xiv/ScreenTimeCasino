@@ -1,7 +1,8 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useLayoutEffect, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppIcon } from '../components/AppIcon';
 import { BudgetBadge } from '../components/BudgetBadge';
 import { HandRow } from '../components/HandRow';
 import {
@@ -14,7 +15,7 @@ import {
 } from '../blackjack/blackjackEngine';
 import type { GameState, Outcome } from '../blackjack/blackjackEngine';
 import type { RootStackParamList } from '../navigation/types';
-import { applyHandResult, getAvailableMinutes } from '../blackjack/screenTimeTracker';
+import { applyHandResult, getStakingStatus, MIN_STAKE, type StakingStatus } from '../blackjack/screenTimeTracker';
 import { casino } from '../theme/casinoTheme';
 import { getManagedApp, type ManagedApp } from '../storage/configRepo';
 import { appendHandRecord } from '../storage/historyRepo';
@@ -22,7 +23,6 @@ import { appendHandRecord } from '../storage/historyRepo';
 type Props = NativeStackScreenProps<RootStackParamList, 'Jeu'>;
 
 const STAKE_STEP = 5;
-const MIN_STAKE = 5;
 
 const OUTCOME_LABEL: Record<Outcome, string> = {
   win: 'VOUS GAGNEZ',
@@ -41,15 +41,14 @@ const OUTCOME_COLOR: Record<Outcome, string> = {
 export function JeuScreen({ route, navigation }: Props) {
   const { packageName } = route.params;
   const [app, setApp] = useState<ManagedApp | undefined>();
-  const [remaining, setRemaining] = useState<number>(0);
+  const [status, setStatus] = useState<StakingStatus | null>(null);
   const [stake, setStake] = useState(MIN_STAKE);
   const [game, setGame] = useState<GameState | null>(null);
   const [lastPayout, setLastPayout] = useState<number | null>(null);
 
   const refresh = useCallback(async () => {
-    const managedApp = getManagedApp(packageName);
-    setApp(managedApp);
-    setRemaining(await getAvailableMinutes(packageName));
+    setApp(getManagedApp(packageName));
+    setStatus(await getStakingStatus(packageName));
   }, [packageName]);
 
   useFocusEffect(
@@ -58,27 +57,34 @@ export function JeuScreen({ route, navigation }: Props) {
     }, [refresh]),
   );
 
+  // Garde la mise dans les bornes autorisées : forcée à la mise de secours si on est
+  // dans ce cas, sinon ramenée à la mise max si le solde a baissé sous la mise choisie.
+  useEffect(() => {
+    if (!status) return;
+    if (status.usingGrace) {
+      setStake(status.maxStake);
+    } else {
+      setStake(s => Math.min(s, Math.max(status.maxStake, MIN_STAKE)));
+    }
+  }, [status]);
+
   useLayoutEffect(() => {
     navigation.setOptions({ title: app?.label ?? 'Blackjack' });
   }, [navigation, app]);
 
   async function settle(next: GameState) {
-    const { payoutMinutes, remainingMinutes } = await applyHandResult(
-      packageName,
-      next.outcome!,
-      next.stakeMinutes,
-      next.doubled,
-    );
+    const { payoutMinutes } = await applyHandResult(packageName, next.outcome!, next.stakeMinutes, next.doubled);
+    const nextStatus = await getStakingStatus(packageName);
     appendHandRecord({
       packageName,
       stakeMinutes: next.stakeMinutes,
       doubled: next.doubled,
       outcome: next.outcome!,
       payoutMinutes,
-      resultingRemaining: remainingMinutes,
+      resultingRemaining: nextStatus.remainingMinutes,
     });
     setLastPayout(payoutMinutes);
-    setRemaining(remainingMinutes);
+    setStatus(nextStatus);
   }
 
   function handleDeal() {
@@ -99,15 +105,16 @@ export function JeuScreen({ route, navigation }: Props) {
     setGame(null);
   }
 
-  const maxStake = Math.max(remaining, 30);
+  if (!status) return null;
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.appLabel}>
-          {app?.icon} {app?.label}
-        </Text>
-        <BudgetBadge remainingMinutes={remaining} />
+        <View style={styles.appLabelRow}>
+          {app && <AppIcon icon={app.icon} size={22} />}
+          <Text style={styles.appLabel}>{app?.label}</Text>
+        </View>
+        <BudgetBadge remainingMinutes={status.remainingMinutes} />
       </View>
 
       {game ? (
@@ -132,25 +139,38 @@ export function JeuScreen({ route, navigation }: Props) {
               <>
                 <ActionButton label="Tirer" onPress={() => act('HIT')} disabled={!canHit(game)} />
                 <ActionButton label="Rester" onPress={() => act('STAND')} disabled={!canStand(game)} />
-                <ActionButton label="Doubler" onPress={() => act('DOUBLE')} disabled={!canDouble(game)} />
+                <ActionButton
+                  label="Doubler"
+                  onPress={() => act('DOUBLE')}
+                  disabled={!canDouble(game) || status.usingGrace}
+                />
               </>
             )}
             {game.phase === 'settled' && <ActionButton label="Rejouer" onPress={handlePlayAgain} primary />}
           </View>
         </>
+      ) : status.locked ? (
+        <View style={styles.lockedBox}>
+          <Text style={styles.lockedTitle}>Verrouillé pour aujourd'hui</Text>
+          <Text style={styles.lockedBody}>
+            Plus aucune mise possible sur {app?.label ?? 'cette app'} — reviens demain.
+          </Text>
+        </View>
       ) : (
         <View style={styles.bettingBox}>
-          <Text style={styles.stakeLabel}>Votre mise</Text>
+          <Text style={styles.stakeLabel}>{status.usingGrace ? 'Mise de secours' : 'Votre mise'}</Text>
           <View style={styles.stepper}>
             <Pressable
-              style={styles.stepperButton}
+              style={[styles.stepperButton, status.usingGrace && styles.stepperButtonDisabled]}
+              disabled={status.usingGrace}
               onPress={() => setStake(s => Math.max(MIN_STAKE, s - STAKE_STEP))}>
               <Text style={styles.stepperGlyph}>−</Text>
             </Pressable>
             <Text style={styles.stakeValue}>{stake} min</Text>
             <Pressable
-              style={styles.stepperButton}
-              onPress={() => setStake(s => Math.min(maxStake, s + STAKE_STEP))}>
+              style={[styles.stepperButton, status.usingGrace && styles.stepperButtonDisabled]}
+              disabled={status.usingGrace}
+              onPress={() => setStake(s => Math.min(status.maxStake, s + STAKE_STEP))}>
               <Text style={styles.stepperGlyph}>+</Text>
             </Pressable>
           </View>
@@ -193,6 +213,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     gap: 8,
   },
+  appLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   appLabel: {
     color: casino.textPrimary,
     fontSize: 18,
@@ -202,6 +227,25 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  lockedBox: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  lockedTitle: {
+    color: casino.lose,
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  lockedBody: {
+    color: casino.textSecondary,
+    fontSize: 15,
+    textAlign: 'center',
   },
   stakeLabel: {
     color: casino.gold,
@@ -225,6 +269,9 @@ const styles = StyleSheet.create({
     borderColor: casino.gold,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  stepperButtonDisabled: {
+    opacity: 0.35,
   },
   stepperGlyph: {
     color: casino.gold,

@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { ManagedApp } from '../storage/configRepo';
 import { casino } from '../theme/casinoTheme';
+import { AppIcon } from './AppIcon';
 import { BudgetBadge } from './BudgetBadge';
 
 interface Props {
@@ -13,7 +14,9 @@ interface Props {
 export function AppListItem({ app, remainingMinutes, onPress }: Props) {
   return (
     <Pressable style={({ pressed }) => [styles.row, pressed && styles.pressed]} onPress={onPress}>
-      <Text style={styles.icon}>{app.icon}</Text>
+      <View style={styles.icon}>
+        <AppIcon icon={app.icon} size={30} />
+      </View>
       <View style={styles.info}>
         <Text style={styles.label}>{app.label}</Text>
         {remainingMinutes !== undefined && <BudgetBadge remainingMinutes={remainingMinutes} />}
@@ -40,7 +43,6 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   icon: {
-    fontSize: 30,
     marginRight: 14,
   },
   info: {

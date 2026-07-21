@@ -68,7 +68,13 @@ interface BalanceRecord {
   date: string;
   /** Minutes gagnées ou perdues au blackjack aujourd'hui, en plus du budget de base de l'app. */
   bankedAdjustments: number;
+  /** Vrai si la mise de secours de 5 min (voir GRACE_MINUTES) a déjà été jouée aujourd'hui. */
+  graceUsed: boolean;
 }
+
+/** Mise minimale légale, et taille de la mise de secours accordée une fois par jour à 0. */
+export const MIN_STAKE = 5;
+const GRACE_MINUTES = 5;
 
 /** Renvoie la date du jour au format yyyy-MM-dd, pour savoir quand réinitialiser le solde. */
 function today(): string {
@@ -89,9 +95,11 @@ function balanceKey(packageName: string): string {
  */
 function readBalanceRecord(packageName: string): BalanceRecord {
   const raw = blockState.getString(balanceKey(packageName));
-  const record: BalanceRecord = raw ? JSON.parse(raw) : { date: today(), bankedAdjustments: 0 };
+  const parsed = raw ? JSON.parse(raw) : { date: today(), bankedAdjustments: 0 };
+  // graceUsed n'existait pas dans les enregistrements écrits avant son ajout : défaut à false.
+  const record: BalanceRecord = { ...parsed, graceUsed: parsed.graceUsed ?? false };
   if (record.date !== today()) {
-    const reset: BalanceRecord = { date: today(), bankedAdjustments: 0 };
+    const reset: BalanceRecord = { date: today(), bankedAdjustments: 0, graceUsed: false };
     blockState.set(balanceKey(packageName), JSON.stringify(reset));
     return reset;
   }
@@ -119,25 +127,54 @@ export async function getAvailableMinutes(packageName: string): Promise<number> 
 /** Ajoute des minutes au solde disponible d'une app. Appelé quand le joueur gagne une main. */
 export function addTime(packageName: string, minutes: number): void {
   const record = readBalanceRecord(packageName);
-  writeBalanceRecord(packageName, {
-    date: record.date,
-    bankedAdjustments: record.bankedAdjustments + minutes,
-  });
+  writeBalanceRecord(packageName, { ...record, bankedAdjustments: record.bankedAdjustments + minutes });
 }
 
 /** Retire des minutes au solde disponible d'une app. Appelé quand le joueur perd une main. */
 export function removeTime(packageName: string, minutes: number): void {
   const record = readBalanceRecord(packageName);
-  writeBalanceRecord(packageName, {
-    date: record.date,
-    bankedAdjustments: record.bankedAdjustments - minutes,
-  });
+  writeBalanceRecord(packageName, { ...record, bankedAdjustments: record.bankedAdjustments - minutes });
+}
+
+export interface StakingStatus {
+  /** Solde restant aujourd'hui, hors emprunt sur demain (identique à getAvailableMinutes). */
+  remainingMinutes: number;
+  /** Mise maximale autorisable pour la prochaine main (0 si verrouillé). */
+  maxStake: number;
+  /** Plus aucune mise possible tant que le jour ne change pas. */
+  locked: boolean;
+  /** La seule mise possible est la mise de secours de GRACE_MINUTES. */
+  usingGrace: boolean;
+}
+
+/**
+ * Détermine ce qu'on peut miser sur une app : jusqu'à son solde du jour + un jour de budget
+ * emprunté d'avance ("le lendemain glissant"). Si ce total tombe sous la mise minimale, une
+ * mise de secours unique de GRACE_MINUTES est accordée ; une fois utilisée, plus aucune mise
+ * n'est possible jusqu'au changement de jour (qui remet tout à zéro).
+ */
+export async function getStakingStatus(packageName: string): Promise<StakingStatus> {
+  const app = getManagedApp(packageName);
+  const baseBudgetMinutes = app?.baseBudgetMinutes ?? 0;
+  const remainingMinutes = await getAvailableMinutes(packageName);
+  const { graceUsed } = readBalanceRecord(packageName);
+  const pool = remainingMinutes + baseBudgetMinutes;
+
+  if (pool >= MIN_STAKE) {
+    return { remainingMinutes, maxStake: pool, locked: false, usingGrace: false };
+  }
+  if (graceUsed) {
+    return { remainingMinutes, maxStake: 0, locked: true, usingGrace: false };
+  }
+  return { remainingMinutes, maxStake: GRACE_MINUTES, locked: false, usingGrace: true };
 }
 
 /**
  * Applique le résultat d'une main de blackjack au solde d'une app : ajoute les minutes gagnées
  * (victoire ou blackjack), retire la mise perdue (défaite), ne change rien en cas d'égalité
- * (push). Retourne le gain/perte net et le nouveau solde disponible.
+ * (push). Si la mise a été jouée alors que le solde+emprunt était déjà sous la mise minimale,
+ * marque la mise de secours du jour comme utilisée. Retourne le gain/perte net et le nouveau
+ * solde disponible.
  */
 export async function applyHandResult(
   packageName: string,
@@ -145,9 +182,19 @@ export async function applyHandResult(
   stakeMinutes: number,
   doubled: boolean,
 ): Promise<{ payoutMinutes: number; remainingMinutes: number }> {
+  const app = getManagedApp(packageName);
+  const baseBudgetMinutes = app?.baseBudgetMinutes ?? 0;
+  const record = readBalanceRecord(packageName);
+  const usedMinutes = await getRealUsageMinutesToday(packageName);
+  const poolBeforePayout = baseBudgetMinutes + record.bankedAdjustments - usedMinutes + baseBudgetMinutes;
+
   const payoutMinutes = payoutForOutcome(outcome, stakeMinutes, doubled);
-  if (payoutMinutes > 0) addTime(packageName, payoutMinutes);
-  if (payoutMinutes < 0) removeTime(packageName, -payoutMinutes);
+  writeBalanceRecord(packageName, {
+    ...record,
+    bankedAdjustments: record.bankedAdjustments + payoutMinutes,
+    graceUsed: record.graceUsed || poolBeforePayout < MIN_STAKE,
+  });
+
   const remainingMinutes = await getAvailableMinutes(packageName);
   return { payoutMinutes, remainingMinutes };
 }

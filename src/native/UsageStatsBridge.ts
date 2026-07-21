@@ -1,25 +1,26 @@
-/**
- * Mock catalog of installed apps for the "add an app to manage" picker. Real permission
- * checking and screen-time reading now live in `src/blackjack/screenTimeTracker.ts`, backed by
- * the native `UsageStatsModule` (Kotlin). Listing real installed apps (via PackageManager) is
- * still a planned follow-up, kept separate since it's a different concern from tracking time.
- */
+import { NativeModules, Platform } from 'react-native';
 
 export interface InstalledApp {
   packageName: string;
   label: string;
-  /** Emoji placeholder in the mock; a `file://` icon URI once installed-app listing is real. */
+  /** Une URI `file://` vers l'icône réelle de l'app, mise en cache côté natif. */
   icon: string;
 }
 
-const MOCK_CATALOG: InstalledApp[] = [
-  { packageName: 'com.instagram.android', label: 'Instagram', icon: '📷' },
-  { packageName: 'com.zhiliaoapp.musically', label: 'TikTok', icon: '🎵' },
-  { packageName: 'com.google.android.youtube', label: 'YouTube', icon: '▶️' },
-  { packageName: 'com.twitter.android', label: 'X', icon: '🐦' },
-  { packageName: 'com.reddit.frontpage', label: 'Reddit', icon: '👽' },
-  { packageName: 'com.snapchat.android', label: 'Snapchat', icon: '👻' },
-];
+interface InstalledAppsNativeModule {
+  getInstalledLaunchableApps(): Promise<InstalledApp[]>;
+}
+
+/**
+ * Référence vers le module natif "InstalledAppsModule"
+ * (android/.../usagestats/InstalledAppsModule.kt). S'il n'est pas disponible (tests Jest,
+ * plateforme non-Android), on retombe sur une liste vide plutôt que de planter.
+ */
+const nativeModule: InstalledAppsNativeModule = NativeModules.InstalledAppsModule ?? {
+  async getInstalledLaunchableApps() {
+    return [];
+  },
+};
 
 export interface UsageStatsBridge {
   getInstalledLaunchableApps(): Promise<InstalledApp[]>;
@@ -27,6 +28,7 @@ export interface UsageStatsBridge {
 
 export const usageStatsBridge: UsageStatsBridge = {
   async getInstalledLaunchableApps() {
-    return MOCK_CATALOG;
+    if (Platform.OS !== 'android') return [];
+    return nativeModule.getInstalledLaunchableApps();
   },
 };

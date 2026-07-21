@@ -2,6 +2,8 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppIcon } from '../components/AppIcon';
+import { checkUsageAccessPermission, requestUsageAccessPermission } from '../blackjack/screenTimeTracker';
 import type { RootStackParamList } from '../navigation/types';
 import { casino } from '../theme/casinoTheme';
 import { getManagedApps, removeManagedApp, updateManagedApp, type ManagedApp } from '../storage/configRepo';
@@ -12,9 +14,11 @@ const BUDGET_STEP = 5;
 
 export function AppConfigScreen({ navigation }: Props) {
   const [apps, setApps] = useState<ManagedApp[]>([]);
+  const [hasUsageAccess, setHasUsageAccess] = useState(true);
 
   const load = useCallback(() => {
     setApps(getManagedApps());
+    checkUsageAccessPermission().then(setHasUsageAccess);
   }, []);
 
   useFocusEffect(load);
@@ -29,6 +33,15 @@ export function AppConfigScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
+      {!hasUsageAccess && (
+        <Pressable style={styles.permissionBanner} onPress={requestUsageAccessPermission}>
+          <Text style={styles.permissionTitle}>Autoriser l'accès à l'utilisation</Text>
+          <Text style={styles.permissionBody}>
+            Sans cette permission, le temps d'écran réel ne peut pas être lu. Appuie ici pour l'activer
+            dans les réglages.
+          </Text>
+        </Pressable>
+      )}
       <FlatList
         data={apps}
         keyExtractor={app => app.packageName}
@@ -36,7 +49,9 @@ export function AppConfigScreen({ navigation }: Props) {
         ListEmptyComponent={<Text style={styles.emptyText}>Aucune application gérée pour le moment.</Text>}
         renderItem={({ item }) => (
           <View style={styles.row}>
-            <Text style={styles.icon}>{item.icon}</Text>
+            <View style={styles.icon}>
+              <AppIcon icon={item.icon} size={28} />
+            </View>
             <View style={styles.info}>
               <Text style={styles.label}>{item.label}</Text>
               <View style={styles.stepper}>
@@ -78,6 +93,25 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: casino.background,
   },
+  permissionBanner: {
+    margin: 16,
+    marginBottom: 0,
+    backgroundColor: casino.surface,
+    borderWidth: 1.5,
+    borderColor: casino.gold,
+    borderRadius: 16,
+    padding: 14,
+  },
+  permissionTitle: {
+    color: casino.gold,
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  permissionBody: {
+    color: casino.textSecondary,
+    fontSize: 13,
+  },
   list: {
     padding: 16,
   },
@@ -98,7 +132,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   icon: {
-    fontSize: 28,
     marginRight: 12,
   },
   info: {
